@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Coiny&family=Sono:wght@200..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <title>Share A Lesson!</title>
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <div class="logo">
+          <img src="logo.png" alt="Today I Learned Logo" />
+          <h1>Share a lesson</h1>
+        </div>
+        <button class="btn btn-large btn-open">Share New Lesson</button>
+      </header>
+
+      <form class="lesson-form hidden">
+        <input type="text" placeholder="Share a lesson with the campus..." />
+        <span>200</span>
+        <input type="text" placeholder="Trustworthy source..." />
+        <select>
+          <option value="">Choose Faculty:</option>
+          <option value="Economic and Management Sciences">
+            Economic and Management Sciences
+          </option>
+          <option value="Education">Education</option>
+          <option value="Engineering">Engineering</option>
+          <option value="Health Sciences">Health Sciences</option>
+          <option value="Humanities">Humanities</option>
+          <option value="Law">Law</option>
+          <option value="Natural and Agricultural Sciences">
+            Natural and Agricultural Sciences
+          </option>
+          <option value="Theology">Theology</option>
+        </select>
+        <button class="btn btn-large">Post</button>
+      </form>
+
+      <main class="main">
+        <aside>
+          <ul>
+            <li class="category">
+              <button class="btn btn-all-categories">All</button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #f97316"
+              >
+                Economic and Management Sciences
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #0284c7"
+              >
+                Education
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #6b7280"
+              >
+                Engineering
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #db2777"
+              >
+                Health Sciences
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #facc15"
+              >
+                Humanities
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #dc2626"
+              >
+                Law
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #16a34a"
+              >
+                Natural and Agricultural Sciences
+              </button>
+            </li>
+            <li class="category">
+              <button
+                class="btn btn-category"
+                style="background-color: #f0abfc"
+              >
+                Theology
+              </button>
+            </li>
+          </ul>
+        </aside>
+
+        <section>
+          <ul class="lessons-list">
+            <li class="lesson">
+              <p>
+                React is being developed by Meta (formerly facebook)
+                <a
+                  class="source"
+                  href="https://opensource.fb.com/"
+                  target="_blank"
+                  >(Source)</a
+                >
+              </p>
+              <span class="tag" style="background-color: #3b82f6"
+                >technology</span
+              >
+              <div class="vote-buttons">
+                <button>👍 24</button>
+                <button>🤯 9</button>
+                <button>⛔ 4</button>
+              </div>
+            </li>
+            <li class="lesson">
+              <p>
+                Millennial dads spend 3 times as much time with their kids than
+                their fathers spent with them. In 1982, 43% of fathers had never
+                changed a diaper. Today, that number is down to 3%
+                <a
+                  class="source"
+                  href="https://www.mother.ly/parenting/millennial-dads-spend-more-time-with-their-kids"
+                  target="_blank"
+                  >(Source)</a
+                >
+              </p>
+              <span class="tag" style="background-color: #eab308">society</span>
+              <div class="vote-buttons">
+                <button>👍 11</button>
+                <button>🤯 2</button>
+                <button>⛔ 0</button>
+              </div>
+            </li>
+            <li class="lesson">
+              <p>
+                Lisbon is the capital of Portugal
+                <a
+                  class="source"
+                  href="https://en.wikipedia.org/wiki/Lisbon"
+                  target="_blank"
+                  >(Source)</a
+                >
+              </p>
+              <span class="tag" style="background-color: #eab308">society</span>
+              <div class="vote-buttons">
+                <button>👍 8</button>
+                <button>🤯 3</button>
+                <button>⛔ 1</button>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
