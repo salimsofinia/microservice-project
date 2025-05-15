@@ -23,11 +23,6 @@ const JWT_SECRET = process.env.JWT_SECRET; // for signing your JWT payload
 // Signed cookie (holding the JWT, signed with COOKIE_SECRET)
 // JWT payload (signed/verified with JWT_SECRET)
 
-// allow-list / deny-list
-
-const allowList = new Set();
-const denyList = new Set();
-
 // mongodb connection ==========================================================
 mongoose
   .connect(process.env.MONGODB_URI, {
@@ -63,6 +58,23 @@ app.use(
     },
   })
 );
+
+// allow max 5 attempts per 1 hour on login
+const loginLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: "Too many login attempts, please try again later.",
+});
+app.use("/login", loginLimiter);
+
+// allow max 5 registrations per hour per IP
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message:
+    "Too many accounts created from this IP, please try again after an hour.",
+});
+app.use("/register", registerLimiter);
 
 // authentication middleware
 
@@ -106,23 +118,41 @@ app.get("/register", (req, res) => {
   req.session.destroy();
   res.clearCookie("connect.sid");
   res.clearCookie("token");
-  res.render("register");
+  res.render("register", { errors: [] });
 });
 
-app.post("/register", async (req, res) => {
-  const { password, username } = req.body;
-  const salt = await bcrypt.genSalt(12);
-  const hash = await bcrypt.hash(password, salt);
-  const user = new User({
-    username,
-    password: hash,
-  });
-  await user.save();
-  req.session.destroy(() => {});
-  res.clearCookie("connect.sid");
-  res.clearCookie("token");
-  res.redirect("/login");
-});
+app.post(
+  "/register",
+  [
+    check("username")
+      .trim()
+      .notEmpty()
+      .withMessage("Username is required")
+      .isAlphanumeric()
+      .withMessage("Username must be alphanumeric"),
+    check("password")
+      .isLength({ min: 3 })
+      .withMessage("Password must be at least 3 characters"),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).render("register", { errors: errors.array() });
+    }
+    const { password, username } = req.body;
+    const salt = await bcrypt.genSalt(12);
+    const hash = await bcrypt.hash(password, salt);
+    const user = new User({
+      username,
+      password: hash,
+    });
+    await user.save();
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    res.redirect("/login");
+  }
+);
 
 // /login ======================================================================
 
@@ -130,14 +160,47 @@ app.get("/login", (req, res) => {
   req.session.destroy();
   res.clearCookie("connect.sid");
   res.clearCookie("token");
-  res.render("login");
+  res.render("login", { errors: [] });
 });
 
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const user = await User.findOne({ username });
-  const validPassword = await bcrypt.compare(password, user.password);
-  if (validPassword) {
+app.post(
+  "/login",
+  [
+    check("username")
+      .trim()
+      .notEmpty()
+      .withMessage("Username is required")
+      .isAlphanumeric()
+      .withMessage("Username must be alphanumeric"),
+    check("password")
+      .isLength({ min: 3 })
+      .withMessage("Password must be at least 3 characters"),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      // re-render login page with errors
+      return res.status(400).render("login", { errors: errors.array() });
+    }
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
+
+    if (!user) {
+      // no such user → show generic “invalid credentials” message
+      return res
+        .status(401)
+        .render("login", { errors: [{ msg: "Invalid username or password" }] });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      // wrong password → same generic message
+      return res
+        .status(401)
+        .render("login", { errors: [{ msg: "Invalid username or password" }] });
+    }
+
+    // — if we reach here, username & password are good —
     // build session
     req.session.user = {
       id: user._id.toString(),
@@ -166,10 +229,8 @@ app.post("/login", async (req, res) => {
       return res.redirect("/moderator");
     }
     return res.redirect("/home");
-  } else {
-    res.redirect("/login");
   }
-});
+);
 
 // /home =======================================================================
 
@@ -192,6 +253,6 @@ app.get("/moderator", requireAuth, (req, res) => {
 
 // localhost:3000 ==============================================================
 
-app.listen(3000, () => {
-  console.log("SERVER IS SERVING!");
+app.listen(process.env.PORT, () => {
+  console.log(`SERVER IS SERVING ON ${process.env.PORT}!`);
 });

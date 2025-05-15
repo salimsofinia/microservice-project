@@ -21,13 +21,21 @@
         </div>
       </header>
 
-      <form action="/register" method="POST" class="register-form">
+      <form action="/register" method="POST" class="register-form" novalidate>
+        <% if (errors && errors.length) { %>
+        <div class="alert alert-danger">
+          <ul>
+            <% errors.forEach(e => { %>
+            <li><%= e.msg %></li>
+            <% }) %>
+          </ul>
+        </div>
+        <% } %>
         <input
           type="text"
           name="username"
           id="username"
           placeholder="Username"
-          required
           autofocus
         />
         <input
@@ -35,10 +43,11 @@
           name="password"
           id="password"
           placeholder="Password"
-          required
         />
         <button class="btn btn-large">Register</button>
-        <button class="btn btn-large" id="login-button">Login Instead</button>
+        <button type="button" class="btn btn-large" id="login-button">
+          Login Instead
+        </button>
       </form>
     </div>
     <script src="/script.js" defer></script>
