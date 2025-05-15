@@ -234,8 +234,32 @@ app.post(
 
 // /home =======================================================================
 
+// app.get("/home", requireAuth, (req, res) => {
+//   res.render("home");
+// });
+
 app.get("/home", requireAuth, (req, res) => {
-  res.render("home");
+  // send them to /home/<their-username>
+  return res.redirect(`/home/${req.session.user.username}`);
+});
+
+app.get("/home/:username", requireAuth, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+
+    // optional: prevent someone else viewing another user's page
+    if (username !== req.session.user.username) {
+      return res.status(403).send("Forbidden");
+    }
+
+    // you could also re-fetch from the DB if you want fresh data:
+    // const user = await User.findOne({ username });
+    // if (!user) return res.status(404).render("404");
+
+    res.render("home", { user: req.session.user });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // /moderator ==================================================================
@@ -248,7 +272,26 @@ app.get("/moderator", requireAuth, (req, res) => {
     res.clearCookie("token");
     return res.redirect("/login");
   }
-  res.render("moderator");
+  return res.redirect(`/moderator/${req.session.user.username}`);
+});
+
+app.get("/moderator/:username", requireAuth, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+
+    // optional: prevent someone else viewing another user's page
+    if (username !== req.session.user.username) {
+      return res.status(403).send("Forbidden");
+    }
+
+    // you could also re-fetch from the DB if you want fresh data:
+    // const user = await User.findOne({ username });
+    // if (!user) return res.status(404).render("404");
+
+    res.render("moderator", { user: req.session.user });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // localhost:3000 ==============================================================
