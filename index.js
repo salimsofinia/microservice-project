@@ -1,23 +1,32 @@
-// const bcrypt = require("bcrypt");
-
-// const hashPassword = async (password) => {
-//   const salt = await bcrypt.genSalt(12);
-//   const hash = await bcrypt.hash(password, salt);
-//   console.log(salt);
-//   console.log(hash);
-// };
-
-// hashPassword("monkey");
-
+// imports =====================================================================
 require("dotenv").config();
 
-// imports =====================================================================
 const express = require("express");
 const User = require("./models/user");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const path = require("path");
 const session = require("express-session");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
+const rateLimit = require("express-rate-limit");
+
+const { check, validationResult } = require("express-validator");
+
+// .env ========================================================================
+
+const COOKIE_SECRET = process.env.COOKIE_SECRET; // for cookie-parser
+const SESSION_SECRET = process.env.SESSION_SECRET; // for express-session
+const JWT_SECRET = process.env.JWT_SECRET; // for signing your JWT payload
+
+// Session (signed with SESSION_SECRET)
+// Signed cookie (holding the JWT, signed with COOKIE_SECRET)
+// JWT payload (signed/verified with JWT_SECRET)
+
+// allow-list / deny-list
+
+const allowList = new Set();
+const denyList = new Set();
 
 // mongodb connection ==========================================================
 mongoose
@@ -38,15 +47,55 @@ app.set("views", "views");
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ secret: process.env.SESSION_SECRET }));
+
+app.use(express.json());
+app.use(cookieParser(COOKIE_SECRET));
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      // maxAge: 1000 * 60 * 60    // 1 hour
+      maxAge: 1000 * 30, // 30sec
+      // express-session automatically signs this cookie with SESSION_SECRET
+    },
+  })
+);
 
 // authentication middleware
 
-const requireLogin = (req, res, next) => {
-  if (!req.session.user_id) {
+const requireAuth = (req, res, next) => {
+  // 1) session must exist
+  if (!req.session?.user) {
+    req.session?.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
     return res.redirect("/login");
   }
-  next();
+
+  // 2) signed JWT cookie must exist
+  const token = req.signedCookies?.token;
+  if (!token) {
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    return res.redirect("/login");
+  }
+
+  // 3) verify JWT integrity & match session
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.id !== req.session.user.id) throw new Error("User mismatch");
+    req.user = payload;
+    return next();
+  } catch {
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    return res.redirect("/login");
+  }
 };
 
 // routes ======================================================================
@@ -55,6 +104,8 @@ const requireLogin = (req, res, next) => {
 
 app.get("/register", (req, res) => {
   req.session.destroy();
+  res.clearCookie("connect.sid");
+  res.clearCookie("token");
   res.render("register");
 });
 
@@ -67,6 +118,9 @@ app.post("/register", async (req, res) => {
     password: hash,
   });
   await user.save();
+  req.session.destroy(() => {});
+  res.clearCookie("connect.sid");
+  res.clearCookie("token");
   res.redirect("/login");
 });
 
@@ -74,6 +128,8 @@ app.post("/register", async (req, res) => {
 
 app.get("/login", (req, res) => {
   req.session.destroy();
+  res.clearCookie("connect.sid");
+  res.clearCookie("token");
   res.render("login");
 });
 
@@ -82,8 +138,34 @@ app.post("/login", async (req, res) => {
   const user = await User.findOne({ username });
   const validPassword = await bcrypt.compare(password, user.password);
   if (validPassword) {
-    req.session.user_id = user._id;
-    res.redirect("/home");
+    // build session
+    req.session.user = {
+      id: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    // build JWT
+    const token = jwt.sign(
+      { id: user._id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    // store token in both session and cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      signed: true,
+      sameSite: "lax",
+      // maxAge: 1000 * 60 * 60    // 1 hour
+      maxAge: 1000 * 30, // 30sec
+    });
+
+    // role-based redirect
+    if (user.role === "mod") {
+      return res.redirect("/moderator");
+    }
+    return res.redirect("/home");
   } else {
     res.redirect("/login");
   }
@@ -91,13 +173,20 @@ app.post("/login", async (req, res) => {
 
 // /home =======================================================================
 
-app.get("/home", requireLogin, (req, res) => {
+app.get("/home", requireAuth, (req, res) => {
   res.render("home");
 });
 
 // /moderator ==================================================================
 
-app.get("/moderator", requireLogin, (req, res) => {
+app.get("/moderator", requireAuth, (req, res) => {
+  // extra guard: only “mod” can see this page
+  if (req.user.role !== "mod") {
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    return res.redirect("/login");
+  }
   res.render("moderator");
 });
 

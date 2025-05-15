@@ -9,6 +9,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, "Password cannot be blank"],
   },
+  role: {
+    type: String,
+    enum: ["user", "mod"],
+    default: "user",
+    required: true,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema, "user");
