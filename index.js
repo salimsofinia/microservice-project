@@ -76,11 +76,75 @@ const registerLimiter = rateLimit({
 });
 app.use("/register", registerLimiter);
 
-// authentication middleware
+// deny user ===================================================================
 
-const requireAuth = (req, res, next) => {
+const denyUser = async (identifier) => {
+  try {
+    // pick filter based on whether it looks like an ObjectId
+    const filter = mongoose.Types.ObjectId.isValid(identifier)
+      ? { _id: identifier }
+      : { username: identifier };
+
+    const updated = await User.findOneAndUpdate(
+      filter,
+      { $set: { denylist: "deny" } },
+      { new: true }
+    );
+
+    if (!updated) {
+      console.error(`❌ No user found for identifier="${identifier}"`);
+    } else {
+      console.log(`✅ User "${updated.username}" is now denied.`);
+    }
+  } catch (err) {
+    console.error("Error updating denylist:", err);
+  }
+};
+
+// denylist middleware =========================================================
+
+async function checkDenyStatus(req, res, next) {
+  try {
+    let userDoc;
+
+    // If they've already authenticated (e.g. /home), look up by ID
+    if (req.user?.id) {
+      userDoc = await User.findById(req.user.id);
+    }
+    // If they're registering (no req.user yet), look up by the submitted username
+    else if (req.body?.username) {
+      userDoc = await User.findOne({ username: req.body.username });
+    }
+
+    // No user or no denylist field → “not found”
+    if (!userDoc || typeof userDoc.denylist === "undefined") {
+      return res.send("No denylist value found");
+    }
+
+    // Allow through
+    if (userDoc.denylist === "allow") {
+      return next();
+    }
+
+    // Explicit deny → force login
+    if (userDoc.denylist === "deny") {
+      return res.redirect("/login");
+    }
+
+    // Any other value
+    return res.send("Unknown denylist value");
+  } catch (err) {
+    console.error("Denylist check failed:", err);
+    return res.status(500).send("Server error");
+  }
+}
+
+// authentication middleware ===================================================
+
+const requireAuth = async (req, res, next) => {
   // 1) session must exist
   if (!req.session?.user) {
+    await denyUser(req.session.user.username);
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -90,6 +154,7 @@ const requireAuth = (req, res, next) => {
   // 2) signed JWT cookie must exist
   const token = req.signedCookies?.token;
   if (!token) {
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -103,6 +168,7 @@ const requireAuth = (req, res, next) => {
     req.user = payload;
     return next();
   } catch {
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -206,13 +272,19 @@ app.post(
       id: user._id.toString(),
       username: user.username,
       role: user.role,
+      denylist: user.denylist,
     };
 
     // build JWT
     const token = jwt.sign(
-      { id: user._id, username: user.username, role: user.role },
+      {
+        id: user._id,
+        username: user.username,
+        role: user.role,
+        denylist: user.denylist,
+      },
       JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "30sec" }
     );
 
     // store token in both session and cookie
@@ -238,35 +310,41 @@ app.post(
 //   res.render("home");
 // });
 
-app.get("/home", requireAuth, (req, res) => {
+app.get("/home", requireAuth, checkDenyStatus, (req, res) => {
   // send them to /home/<their-username>
   return res.redirect(`/home/${req.session.user.username}`);
 });
 
-app.get("/home/:username", requireAuth, async (req, res, next) => {
-  try {
-    const { username } = req.params;
+app.get(
+  "/home/:username",
+  requireAuth,
+  checkDenyStatus,
+  async (req, res, next) => {
+    try {
+      const { username } = req.params;
 
-    // optional: prevent someone else viewing another user's page
-    if (username !== req.session.user.username) {
-      return res.status(403).send("Forbidden");
+      // optional: prevent someone else viewing another user's page
+      if (username !== req.session.user.username) {
+        return res.status(403).send("Forbidden");
+      }
+
+      // you could also re-fetch from the DB if you want fresh data:
+      // const user = await User.findOne({ username });
+      // if (!user) return res.status(404).render("404");
+
+      res.render("home", { user: req.session.user });
+    } catch (err) {
+      next(err);
     }
-
-    // you could also re-fetch from the DB if you want fresh data:
-    // const user = await User.findOne({ username });
-    // if (!user) return res.status(404).render("404");
-
-    res.render("home", { user: req.session.user });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
 // /moderator ==================================================================
 
-app.get("/moderator", requireAuth, (req, res) => {
+app.get("/moderator", requireAuth, checkDenyStatus, async (req, res) => {
   // extra guard: only “mod” can see this page
   if (req.user.role !== "mod") {
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -275,24 +353,29 @@ app.get("/moderator", requireAuth, (req, res) => {
   return res.redirect(`/moderator/${req.session.user.username}`);
 });
 
-app.get("/moderator/:username", requireAuth, async (req, res, next) => {
-  try {
-    const { username } = req.params;
+app.get(
+  "/moderator/:username",
+  requireAuth,
+  checkDenyStatus,
+  async (req, res, next) => {
+    try {
+      const { username } = req.params;
 
-    // optional: prevent someone else viewing another user's page
-    if (username !== req.session.user.username) {
-      return res.status(403).send("Forbidden");
+      // optional: prevent someone else viewing another user's page
+      if (username !== req.session.user.username) {
+        return res.status(403).send("Forbidden");
+      }
+
+      // you could also re-fetch from the DB if you want fresh data:
+      // const user = await User.findOne({ username });
+      // if (!user) return res.status(404).render("404");
+
+      res.render("moderator", { user: req.session.user });
+    } catch (err) {
+      next(err);
     }
-
-    // you could also re-fetch from the DB if you want fresh data:
-    // const user = await User.findOne({ username });
-    // if (!user) return res.status(404).render("404");
-
-    res.render("moderator", { user: req.session.user });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
 // localhost:3000 ==============================================================
 

@@ -15,6 +15,12 @@ const userSchema = new mongoose.Schema({
     default: "user",
     required: true,
   },
+  denylist: {
+    type: String,
+    enum: ["allow", "deny"],
+    default: "allow",
+    required: true,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema, "user");
