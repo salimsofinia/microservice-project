@@ -216,8 +216,8 @@ app.post(
       .isAlphanumeric()
       .withMessage("Username must be alphanumeric"),
     check("password")
-      .isLength({ min: 3 })
-      .withMessage("Password must be at least 3 characters"),
+      .isLength({ min: 20 })
+      .withMessage("Password must be at least 20 characters"),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -258,8 +258,8 @@ app.post(
       .isAlphanumeric()
       .withMessage("Username must be alphanumeric"),
     check("password")
-      .isLength({ min: 3 })
-      .withMessage("Password must be at least 3 characters"),
+      .isLength({ min: 20 })
+      .withMessage("Password must be at least 20 characters"),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
