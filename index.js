@@ -144,29 +144,19 @@ async function checkDenyStatus(req, res, next) {
 // authentication middleware ===================================================
 
 const requireAuth = async (req, res, next) => {
-  // grab session user once
+  // Pull session user (if any) and its username
   const sessionUser = req.session?.user;
-
-  // if there's no session or user object, destroy & redirect
-  if (!sessionUser) {
+  const username = sessionUser?.username;
+  // 1) session must exist
+  if (!sessionUser || !username) {
+    await denyUser(username);
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
     return res.redirect("/login");
   }
 
-  // pull username & id & role from session
-  const { username, id, role } = sessionUser;
-
-  // ensure we actually got a username & id
-  if (!username || !id) {
-    req.session.destroy(() => {});
-    res.clearCookie("connect.sid");
-    res.clearCookie("token");
-    return res.redirect("/login");
-  }
-
-  // check for signed JWT cookie
+  // 2) signed JWT cookie must exist
   const token = req.signedCookies?.token;
   if (!token) {
     await denyUser(username);
@@ -176,28 +166,33 @@ const requireAuth = async (req, res, next) => {
     return res.redirect("/login");
   }
 
-  // verify JWT and match session id
+  // 3) verify JWT integrity & match session
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.id !== id) {
-      throw new Error("User mismatch");
-    }
-
-    // attach full user info to req.user for downstream handlers
-    req.user = {
-      id: payload.id,
-      username,
-      role, // now available for your /moderator guard
-    };
-
+    if (payload.id !== sessionUser.id) throw new Error("User mismatch");
+    req.user = payload;
     return next();
-  } catch (err) {
+  } catch {
     await denyUser(username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
     return res.redirect("/login");
   }
+};
+
+const requireMod = async (req, res, next) => {
+  if (req.user.role !== "mod") {
+    // blacklist them
+    await denyUser(req.session.user.username);
+    // destroy their session + cookies
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    // kick them back to login
+    return res.redirect("/login");
+  }
+  next();
 };
 
 // routes ======================================================================
@@ -365,22 +360,29 @@ app.get(
 
 // /moderator ==================================================================
 
-app.get("/moderator", requireAuth, checkDenyStatus, async (req, res) => {
-  // extra guard: only “mod” can see this page
-  if (req.user.role !== "mod") {
-    await denyUser(req.session.user.username);
-    req.session.destroy(() => {});
-    res.clearCookie("connect.sid");
-    res.clearCookie("token");
-    return res.redirect("/login");
+app.get(
+  "/moderator",
+  requireAuth,
+  checkDenyStatus,
+  requireMod,
+  async (req, res) => {
+    // extra guard: only “mod” can see this page
+    if (req.user.role !== "mod") {
+      await denyUser(req.session.user.username);
+      req.session.destroy(() => {});
+      res.clearCookie("connect.sid");
+      res.clearCookie("token");
+      return res.redirect("/login");
+    }
+    return res.redirect(`/moderator/${req.session.user.username}`);
   }
-  return res.redirect(`/moderator/${req.session.user.username}`);
-});
+);
 
 app.get(
   "/moderator/:username",
   requireAuth,
   checkDenyStatus,
+  requireMod,
   async (req, res, next) => {
     try {
       const { username } = req.params;
