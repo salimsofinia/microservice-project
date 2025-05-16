@@ -24,6 +24,7 @@ const JWT_SECRET = process.env.JWT_SECRET; // for signing your JWT payload
 // JWT payload (signed/verified with JWT_SECRET)
 
 // mongodb connection ==========================================================
+console.log("⚡️ Connecting to MongoDB at:", process.env.MONGODB_URI);
 mongoose
   .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
