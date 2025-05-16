@@ -144,19 +144,29 @@ async function checkDenyStatus(req, res, next) {
 // authentication middleware ===================================================
 
 const requireAuth = async (req, res, next) => {
-  // Pull session user (if any) and its username
+  // grab session user once
   const sessionUser = req.session?.user;
-  const username = sessionUser?.username;
-  // 1) session must exist
-  if (!sessionUser || !username) {
-    await denyUser(username);
+
+  // if there's no session or user object, destroy & redirect
+  if (!sessionUser) {
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
     return res.redirect("/login");
   }
 
-  // 2) signed JWT cookie must exist
+  // pull username & id & role from session
+  const { username, id, role } = sessionUser;
+
+  // ensure we actually got a username & id
+  if (!username || !id) {
+    req.session.destroy(() => {});
+    res.clearCookie("connect.sid");
+    res.clearCookie("token");
+    return res.redirect("/login");
+  }
+
+  // check for signed JWT cookie
   const token = req.signedCookies?.token;
   if (!token) {
     await denyUser(username);
@@ -166,13 +176,22 @@ const requireAuth = async (req, res, next) => {
     return res.redirect("/login");
   }
 
-  // 3) verify JWT integrity & match session
+  // verify JWT and match session id
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.id !== sessionUser.id) throw new Error("User mismatch");
-    req.user = payload;
+    if (payload.id !== id) {
+      throw new Error("User mismatch");
+    }
+
+    // attach full user info to req.user for downstream handlers
+    req.user = {
+      id: payload.id,
+      username,
+      role, // now available for your /moderator guard
+    };
+
     return next();
-  } catch {
+  } catch (err) {
     await denyUser(username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
