@@ -347,11 +347,9 @@ app.get(
 // /moderator ==================================================================
 
 app.get("/moderator", requireAuth, checkDenyStatus, async (req, res) => {
-  const sessionUser = req.session?.user;
-  const username = sessionUser?.username;
   // extra guard: only “mod” can see this page
   if (req.user.role !== "mod") {
-    await denyUser(username);
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
