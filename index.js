@@ -144,9 +144,12 @@ async function checkDenyStatus(req, res, next) {
 // authentication middleware ===================================================
 
 const requireAuth = async (req, res, next) => {
+  // Pull session user (if any) and its username
+  const sessionUser = req.session?.user;
+  const username = sessionUser?.username;
   // 1) session must exist
-  if (!req.session?.user) {
-    await denyUser(req.session.user.username);
+  if (!sessionUser || !username) {
+    await denyUser(username);
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -156,7 +159,7 @@ const requireAuth = async (req, res, next) => {
   // 2) signed JWT cookie must exist
   const token = req.signedCookies?.token;
   if (!token) {
-    await denyUser(req.session.user.username);
+    await denyUser(username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -166,11 +169,11 @@ const requireAuth = async (req, res, next) => {
   // 3) verify JWT integrity & match session
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.id !== req.session.user.id) throw new Error("User mismatch");
+    if (payload.id !== sessionUser.id) throw new Error("User mismatch");
     req.user = payload;
     return next();
   } catch {
-    await denyUser(req.session.user.username);
+    await denyUser(username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
