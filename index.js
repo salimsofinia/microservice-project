@@ -149,7 +149,7 @@ const requireAuth = async (req, res, next) => {
   const username = sessionUser?.username;
   // 1) session must exist
   if (!sessionUser || !username) {
-    await denyUser(username);
+    await denyUser(req.session.user.username);
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -159,7 +159,7 @@ const requireAuth = async (req, res, next) => {
   // 2) signed JWT cookie must exist
   const token = req.signedCookies?.token;
   if (!token) {
-    await denyUser(username);
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
@@ -173,7 +173,7 @@ const requireAuth = async (req, res, next) => {
     req.user = payload;
     return next();
   } catch {
-    await denyUser(username);
+    await denyUser(req.session.user.username);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
