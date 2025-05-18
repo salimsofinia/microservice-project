@@ -144,41 +144,39 @@ async function checkDenyStatus(req, res, next) {
 // authentication middleware ===================================================
 
 const requireAuth = async (req, res, next) => {
-  // Pull session user (if any) and its username
-  const sessionUser = req.session?.user;
-  const username = sessionUser?.username;
-  // 1) session must exist
-  if (!sessionUser || !username) {
-    await denyUser(req.session.user.username);
+  // 1️⃣ Try to verify the JWT (so we always have an id/username to blacklist)
+  const token = req.signedCookies?.token;
+  let payload;
+  try {
+    if (!token) throw new Error("No token");
+    payload = jwt.verify(token, JWT_SECRET);
+  } catch {
+    // Token missing/invalid → blacklist by session if still there
+    const fallbackUsername = req.session?.user?.username;
+    if (fallbackUsername) {
+      await denyUser(fallbackUsername);
+    }
     req.session?.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
     return res.redirect("/login");
   }
 
-  // 2) signed JWT cookie must exist
-  const token = req.signedCookies?.token;
-  if (!token) {
-    await denyUser(req.session.user.username);
+  // 2️⃣ Now that the token is valid, check the session
+  const sessionUser = req.session?.user;
+  if (!sessionUser || payload.id !== sessionUser.id) {
+    // Session missing or mismatched → blacklist via payload info
+    const toDeny = payload.username || payload.id;
+    await denyUser(toDeny);
     req.session.destroy(() => {});
     res.clearCookie("connect.sid");
     res.clearCookie("token");
     return res.redirect("/login");
   }
 
-  // 3) verify JWT integrity & match session
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.id !== sessionUser.id) throw new Error("User mismatch");
-    req.user = payload;
-    return next();
-  } catch {
-    await denyUser(req.session.user.username);
-    req.session.destroy(() => {});
-    res.clearCookie("connect.sid");
-    res.clearCookie("token");
-    return res.redirect("/login");
-  }
+  // 3️⃣ All good → attach user and continue
+  req.user = payload;
+  next();
 };
 
 const requireMod = async (req, res, next) => {
